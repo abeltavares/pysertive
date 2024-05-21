@@ -1,0 +1,7 @@
+- [ ] The PR title provides a concise description of my changes
+- [ ] My changes follow the project's coding style
+- [ ] All code checks passed (pre-commit)
+- [ ] Tests added and passed (if fixing a bug or adding a new feature)
+- [ ] Added type annotations
+- [ ] Updated the documentation
+- [ ] Closes #xxxx (Replace xxxx with the GitHub issue number)
