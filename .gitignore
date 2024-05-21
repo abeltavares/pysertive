@@ -119,3 +119,6 @@ config.yaml
 
 # Ignore pyright type checker
 .pyright/
+
+# Ignore poetry lock file
+poetry.lock
