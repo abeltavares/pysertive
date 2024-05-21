@@ -1,0 +1,89 @@
+name: Unit Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.12'
+
+      - name: Install dependencies with Poetry
+        uses: abatilo/actions-poetry@v2.1.1
+        with:
+          poetry-version: '1.8.3'
+
+      - name: Install the package
+        run: |
+          poetry install
+          poetry build
+          poetry run pip install dist/*.whl
+
+      - name: Install xmllint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxml2-utils
+
+      - name: Run tests with coverage
+        run: |
+          PYTHONPATH=$PWD poetry run pytest --cov=pysertive/ --cov-report=xml --cov-report=term --junitxml=test-results.xml
+
+      - name: Extract coverage percentage
+        id: extract-coverage
+        run: |
+          COVERAGE_PERCENTAGE=$(xmllint --xpath "string(//coverage/@line-rate)" coverage.xml | awk '{print $1 * 100}')
+          echo "COVERAGE_PERCENTAGE=$COVERAGE_PERCENTAGE" >> $GITHUB_ENV
+
+      - name: Update README badge
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERAGE_PERCENTAGE: ${{ env.COVERAGE_PERCENTAGE }}
+        run: |
+          if (( $(echo "$COVERAGE_PERCENTAGE < 40" | bc -l) )); then
+            COLOR="red"
+          elif (( $(echo "$COVERAGE_PERCENTAGE < 60" | bc -l) )); then
+            COLOR="orange"
+          elif (( $(echo "$COVERAGE_PERCENTAGE < 80" | bc -l) )); then
+            COLOR="yellow"
+          elif (( $(echo "$COVERAGE_PERCENTAGE < 90" | bc -l) )); then
+            COLOR="yellowgreen"
+          else
+            COLOR="green"
+          fi
+          ENCODED_PERCENTAGE=$(echo "$COVERAGE_PERCENTAGE" | sed 's/%/%25/g')
+          sed -i "s|https://img.shields.io/badge/coverage-[0-9]*%25-[a-z]*|https://img.shields.io/badge/coverage-$ENCODED_PERCENTAGE%25-$COLOR|g" README.md
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add README.md
+          if git diff-index --quiet HEAD --; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update Code Coverage"
+            git push -u origin HEAD:refs/heads/main
+          fi
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.merged == false
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          pytest-xml-coverage-path: coverage.xml
